@@ -8,7 +8,7 @@ from pathlib import Path
 from tkinter import ttk
 from typing import Optional
 
-from .core import Ajustes, Transmision
+from .core import Ajustes, Transmision, sin_modo_eficiencia
 
 log = logging.getLogger("gogocam")
 
@@ -17,7 +17,8 @@ CALIDADES = {"1080p (1920x1080)": "1920x1080", "720p (1280x720)": "1280x720"}
 ROTACIONES = {"0°": 0, "90°": 90, "180°": 180, "270°": 270}
 COLORES = {"info": "#555555", "ok": "#1a7f37", "error": "#c62828", "fin": "#555555"}
 FONDO_VISTA = "#1e1e1e"
-TICK_MS = 15  # más corto que un cuadro a 30 fps (33 ms): la vista previa no se salta cuadros
+TICK_MS = 30  # la vista previa llega a ~10 fps; revisar cada 30 ms la muestra pareja
+TICK_MINIMIZADA_MS = 250  # minimizada solo se atienden avisos (errores, fin)
 
 
 def _clave(diccionario: dict, valor) -> str:
@@ -200,7 +201,13 @@ class App:
 
     def _tick(self) -> None:
         t = self.transmision
+        minimizada = self.raiz.state() == "iconic"
+        transmitiendo = t is not None and t.activa and t.cuadros > 0
+        titulo = "GoGoCam · transmitiendo" if transmitiendo else "GoGoCam"
+        if self.raiz.title() != titulo:  # minimizada, se lee en la barra de tareas
+            self.raiz.title(titulo)
         if t is not None:
+            t.vista_oculta = minimizada  # minimizada no se arma la vista previa: la reunión sigue igual
             while not t.eventos.empty():
                 tipo, texto = t.eventos.get()
                 if tipo == "fin":
@@ -213,14 +220,15 @@ class App:
                     self._poner_estado(tipo, texto)
             if t.activa:
                 muestra = t.vista_previa
-                if self.ajustes.vista_previa and muestra is not None and muestra is not self._ultima_muestra:
+                if (not minimizada and self.ajustes.vista_previa and muestra is not None
+                        and muestra is not self._ultima_muestra):
                     self._pintar(muestra)
                 if t.cuadros:
                     ancho, alto = t.tamano_salida
                     texto = f"{ancho}x{alto} · {t.fps:.0f} fps · «OBS Virtual Camera»"
                     if self.datos.cget("text") != texto:
                         self.datos.configure(text=texto)
-        self.raiz.after(TICK_MS, self._tick)
+        self.raiz.after(TICK_MINIMIZADA_MS if minimizada else TICK_MS, self._tick)
 
 
 def ejecutar(carpeta_datos: Path) -> None:
@@ -230,6 +238,7 @@ def ejecutar(carpeta_datos: Path) -> None:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except (AttributeError, OSError):
         pass
+    sin_modo_eficiencia()  # minimizada tiene que seguir a toda velocidad
     raiz = tk.Tk()
     App(raiz, carpeta_datos)
     raiz.mainloop()

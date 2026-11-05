@@ -35,6 +35,7 @@ SERVIDOR_LOCAL = RAIZ / "vendor" / f"scrcpy-server-v{VERSION_SERVIDOR}"
 SERVIDOR_REMOTO = "/data/local/tmp/gogocam-server.jar"
 SDK_MINIMO = 31  # Android 12: lo exige el modo cámara de scrcpy
 CAJA_VISTA_PREVIA = (400, 260)  # el recuadro de la ventana, en píxeles
+CUADROS_POR_MUESTRA = 3  # vista previa a ~10 fps (gasta menos); la cámara virtual recibe TODOS
 SIN_VENTANA = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # que adb no abra consolas
 
 log = logging.getLogger("gogocam")
@@ -211,6 +212,37 @@ def tamano_vista_previa(ancho: int, alto: int, rotacion: int) -> tuple[int, int]
     return (max(2, int(ancho_final * escala) // 2 * 2), max(2, int(alto_final * escala) // 2 * 2))
 
 
+def sin_modo_eficiencia() -> bool:
+    """Le pide a Windows que no frene este proceso estando minimizado.
+
+    Windows 11 aplica "modo eficiencia" (EcoQoS) a los procesos en segundo plano:
+    baja la velocidad del CPU para ellos y eso trabaría el video que recibe la reunión.
+    Devuelve True si Windows aceptó.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class EstadoAhorro(ctypes.Structure):  # PROCESS_POWER_THROTTLING_STATE
+            _fields_ = [("Version", wintypes.ULONG), ("ControlMask", wintypes.ULONG),
+                        ("StateMask", wintypes.ULONG)]
+
+        velocidad, resolucion_timer = 0x1, 0x4  # ..._EXECUTION_SPEED, ..._IGNORE_TIMER_RESOLUTION
+        estado = EstadoAhorro(1, velocidad | resolucion_timer, 0)  # StateMask 0 = nunca frenar
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        kernel32.SetProcessInformation.argtypes = [
+            wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+        kernel32.SetProcessInformation.restype = wintypes.BOOL
+        ok = bool(kernel32.SetProcessInformation(
+            kernel32.GetCurrentProcess(), 4,  # 4 = ProcessPowerThrottling
+            ctypes.byref(estado), ctypes.sizeof(estado)))
+    except (AttributeError, OSError):
+        ok = False
+    log.info("modo eficiencia de Windows desactivado: %s", ok)
+    return ok
+
+
 def puerto_libre() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
@@ -242,6 +274,7 @@ class Transmision:
         self.ajustes = ajustes
         self.eventos: "queue.Queue[tuple[str, str]]" = queue.Queue()
         self.vista_previa: Optional[bytes] = None  # PPM del último cuadro de muestra
+        self.vista_oculta = False  # la ventana está minimizada: no se arma la vista previa
         self.cuadros = 0
         self.fps = 0.0
         self.tamano_salida = (0, 0)
@@ -441,7 +474,8 @@ class Transmision:
                     if ahora - ventana_inicio >= 1.0:
                         self.fps = cuadros_ventana / (ahora - ventana_inicio)
                         ventana_inicio, cuadros_ventana = ahora, 0
-                    if self.ajustes.vista_previa:  # todos los cuadros: con 1 de 3 se veía trabada
+                    if (self.ajustes.vista_previa and not self.vista_oculta
+                            and self.cuadros % CUADROS_POR_MUESTRA == 0):
                         self.vista_previa = self._muestra(cuadro, rotacion, espejo)
         finally:
             if camara is not None:
