@@ -441,7 +441,7 @@ class Transmision:
                     if ahora - ventana_inicio >= 1.0:
                         self.fps = cuadros_ventana / (ahora - ventana_inicio)
                         ventana_inicio, cuadros_ventana = ahora, 0
-                    if self.ajustes.vista_previa and self.cuadros % 3 == 0:
+                    if self.ajustes.vista_previa:  # todos los cuadros: con 1 de 3 se veía trabada
                         self.vista_previa = self._muestra(cuadro, rotacion, espejo)
         finally:
             if camara is not None:

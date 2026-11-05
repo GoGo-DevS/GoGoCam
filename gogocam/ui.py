@@ -17,7 +17,7 @@ CALIDADES = {"1080p (1920x1080)": "1920x1080", "720p (1280x720)": "1280x720"}
 ROTACIONES = {"0°": 0, "90°": 90, "180°": 180, "270°": 270}
 COLORES = {"info": "#555555", "ok": "#1a7f37", "error": "#c62828", "fin": "#555555"}
 FONDO_VISTA = "#1e1e1e"
-TICK_MS = 80
+TICK_MS = 15  # más corto que un cuadro a 30 fps (33 ms): la vista previa no se salta cuadros
 
 
 def _clave(diccionario: dict, valor) -> str:
@@ -58,6 +58,7 @@ class App:
         self.ajustes = cargar_ajustes(self.archivo_ajustes)
         self.transmision: Optional[Transmision] = None
         self._imagen: Optional[tk.PhotoImage] = None
+        self._tamano_imagen: tuple = ()
         self._ultima_muestra: Optional[bytes] = None
 
         raiz.title("GoGoCam")
@@ -186,6 +187,17 @@ class App:
         self._ultima_muestra = None
         self.vista.configure(image="", text=texto)
 
+    def _pintar(self, muestra: bytes) -> None:
+        """Muestra un cuadro PPM. Reutiliza la imagen si no cambió de tamaño (rotación)."""
+        tamano = tuple(muestra.split(maxsplit=3)[1:3])  # cabecera b"P6 ancho alto 255\n"
+        if self._imagen is None or tamano != self._tamano_imagen:
+            self._imagen = tk.PhotoImage(data=muestra, format="PPM")
+            self._tamano_imagen = tamano
+            self.vista.configure(image=self._imagen, text="")
+        else:
+            self._imagen.configure(data=muestra, format="PPM")
+        self._ultima_muestra = muestra
+
     def _tick(self) -> None:
         t = self.transmision
         if t is not None:
@@ -202,12 +214,12 @@ class App:
             if t.activa:
                 muestra = t.vista_previa
                 if self.ajustes.vista_previa and muestra is not None and muestra is not self._ultima_muestra:
-                    self._imagen = tk.PhotoImage(data=muestra, format="PPM")
-                    self.vista.configure(image=self._imagen, text="")
-                    self._ultima_muestra = muestra
+                    self._pintar(muestra)
                 if t.cuadros:
                     ancho, alto = t.tamano_salida
-                    self.datos.configure(text=f"{ancho}x{alto} · {t.fps:.0f} fps · «OBS Virtual Camera»")
+                    texto = f"{ancho}x{alto} · {t.fps:.0f} fps · «OBS Virtual Camera»"
+                    if self.datos.cget("text") != texto:
+                        self.datos.configure(text=texto)
         self.raiz.after(TICK_MS, self._tick)
 
 
