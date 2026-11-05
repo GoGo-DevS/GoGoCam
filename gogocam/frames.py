@@ -51,6 +51,30 @@ def transformar_i420(
     return salida, nuevo_ancho, nuevo_alto
 
 
+def tabla_brillo_contraste(brillo: int, contraste: int) -> np.ndarray | None:
+    """Tabla de 256 valores para el plano Y (luminancia).
+
+    brillo: se suma (-50 a 50). contraste: porcentaje alrededor del gris medio (50 a 150).
+    Devuelve None si los valores son los neutros: no hay nada que hacer.
+    """
+    if brillo == 0 and contraste == 100:
+        return None
+    y = np.arange(256, dtype=np.float32)
+    salida = (y - 128.0) * (contraste / 100.0) + 128.0 + brillo
+    return np.clip(np.rint(salida), 0, 255).astype(np.uint8)
+
+
+def aplicar_tabla_y(datos: np.ndarray, ancho: int, alto: int, tabla: np.ndarray) -> np.ndarray:
+    """Aplica la tabla solo al plano Y de un cuadro I420, en el mismo arreglo.
+
+    El color (U y V) no se toca: brillo y contraste cambian la luz, no el tono.
+    """
+    plano = datos.reshape(-1)
+    tam_y = ancho * alto
+    plano[:tam_y] = tabla[plano[:tam_y]]
+    return plano
+
+
 def transformar_rgb(imagen: np.ndarray, rotacion: int = 0, espejo: bool = False) -> np.ndarray:
     """Igual que transformar_i420, para la vista previa en RGB (alto x ancho x 3)."""
     if rotacion not in ROTACIONES:

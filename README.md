@@ -27,12 +27,31 @@ Teléfono (Android 12+)  --USB-->  GoGoCam (PC)  -->  «OBS Virtual Camera»  --
 2. Abre **GoGoCam** (acceso directo del escritorio) y presiona **Iniciar**.
 3. En la app donde la quieras usar, elige la cámara **«OBS Virtual Camera»**.
 
-- **Cámara** (trasera/frontal) y **Calidad** (1080p/720p) se eligen antes de
-  iniciar.
-- **Rotación** y **Espejo** se cambian en vivo. Si el teléfono está vertical,
-  usa 90° o 270°.
-- Los ajustes se recuerdan en `%LOCALAPPDATA%\GoGoCam\ajustes.json` y el
-  registro queda en `%LOCALAPPDATA%\GoGoCam\gogocam.log`.
+Se puede **minimizar**: sigue transmitiendo igual (la barra de tareas dice
+«GoGoCam · transmitiendo») y deja de dibujar la vista previa para gastar menos.
+Windows no la frena en segundo plano (se le desactiva el «modo eficiencia»).
+
+**Pestaña Imagen** (todo en vivo, sin cortar la reunión):
+
+- **Brillo** y **Contraste**: se aplican en el PC a la luz de la imagen.
+- **Zoom** de 1x a 4x: es el zoom de la cámara del teléfono, por el canal de
+  control de scrcpy.
+- **Linterna**: el flash del teléfono como luz de relleno (solo cámara trasera).
+- **Rotación** (90° o 270° si el teléfono está vertical) y **Espejo**.
+
+**Pestaña Calidad** (se aplica al presionar Iniciar): cámara, resolución
+(1080p/720p), formato (16:9/4:3), fps (30/20/15) y bitrate (8/12/20 Mbps).
+**Con poca luz usa 20 fps**: medido en el Redmi 13C, la misma pieza dio luz
+media ~30 a 30 fps y ~100 a 20 fps, porque la cámara puede exponer 1/20 s.
+
+**Pestaña Opciones**: vista previa, empezar a transmitir al abrir, abrir con
+Windows (acceso directo minimizado en la carpeta Inicio) y tema oscuro.
+
+Los ajustes se recuerdan en `%LOCALAPPDATA%\GoGoCam\ajustes.json` y el registro
+queda en `%LOCALAPPDATA%\GoGoCam\gogocam.log`.
+
+El teléfono no da más de **30 fps** (lo informa así su cámara, y no tiene modo
+de alta velocidad). El codificador exige alto múltiplo de 16: 1080 sale 1072.
 
 **Para grabar en OBS:** agrega una fuente «Dispositivo de captura de video» con
 «OBS Virtual Camera». No enciendas a la vez la cámara virtual de OBS: GoGoCam
@@ -55,6 +74,7 @@ py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m unittest discover -s tests -t .      # pruebas
 .\.venv\Scripts\python.exe herramientas\prueba_sin_telefono.py      # cadena completa sin teléfono
 .\.venv\Scripts\python.exe -m gogocam --prueba 10                   # 10 s con el teléfono real, sin ventana
+.\.venv\Scripts\python.exe herramientas\generar_icono.py            # vuelve a dibujar recursos/gogocam.*
 ```
 
 `prueba_sin_telefono.py` levanta un teléfono falso que habla el mismo protocolo
@@ -63,11 +83,16 @@ el relleno de OBS. Revisa también las capturas que guarda.
 
 Estructura:
 
-- `gogocam/core.py`: adb, servidor del teléfono, decodificación y cámara virtual.
+- `gogocam/core.py`: adb, servidor del teléfono, decodificación, cámara virtual
+  y canal de control (zoom/linterna: mensajes 18, 19 y 20 de `ControlMessage.java`
+  de scrcpy 5.0.1; se mandan recién con cuadros llegando, porque antes el
+  teléfono los descarta sin avisar).
 - `gogocam/protocolo.py`: lectura del flujo de scrcpy v5.0.1 (verificado contra
   `Streamer.java` y `DesktopConnection.java` de esa versión).
-- `gogocam/frames.py`: rotación y espejo sobre I420, sin pasar por RGB.
-- `gogocam/ui.py`: la ventana (Tkinter).
+- `gogocam/frames.py`: rotación, espejo, brillo y contraste sobre I420, sin pasar por RGB.
+- `gogocam/ui.py`: la ventana (Tkinter, tema `clam` con los colores de GoGoDevS).
+- `gogocam/sistema.py`: ícono, barra de título oscura y abrir con Windows.
+- `recursos/`: ícono (lo dibuja `herramientas/generar_icono.py`).
 
 **Actualizar scrcpy:** el servidor y el cliente tienen que ser exactamente de la
 misma versión. Baja `scrcpy-server-vX.Y.Z` de la release oficial, verifica su

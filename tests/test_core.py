@@ -1,8 +1,10 @@
+import math
 import unittest
 
 from gogocam.core import (
-    Ajustes, GoGoCamError, analizar_registro_servidor, app_que_usa_camara, argumentos_servidor,
-    elegir_telefono, explicar_fallo_servidor, tamano_vista_previa,
+    ZOOM_PASO_MAX, Ajustes, GoGoCamError, analizar_registro_servidor, app_que_usa_camara,
+    argumentos_servidor, elegir_telefono, explicar_fallo_servidor, limitar_paso, linterna_pedida,
+    mensajes_control, tamano_vista_previa, zoom_de_paso,
 )
 
 # Líneas reales del Redmi 13C 5G con DroidCam ocupando la cámara (05-11-2026).
@@ -54,10 +56,52 @@ class PruebasTelefono(unittest.TestCase):
         # El servidor lee el scid en hexadecimal; el túnel usa los mismos 8 dígitos.
         self.assertIn("scid=00001a2b", args)
         for esperado in ("video_source=camera", "camera_facing=back", "camera_size=1920x1080",
-                         "camera_fps=30", "audio=false", "control=false", "tunnel_forward=true",
+                         "camera_fps=30", "audio=false", "control=true", "tunnel_forward=true",
                          "video_codec=h264"):
             self.assertIn(esperado, args)
         self.assertTrue(all(" " not in a for a in args), "adb shell separa por espacios")
+        # Sin zoom ni linterna no se mandan esos argumentos
+        self.assertFalse(any(a.startswith(("camera_zoom", "camera_torch")) for a in args))
+
+    def test_argumentos_zoom_y_linterna_al_arrancar(self):
+        args = argumentos_servidor(Ajustes(camara="back", zoom_paso=12, linterna=True), scid=1)
+        self.assertIn(f"camera_zoom={1.0625 ** 12:.6f}", args)
+        self.assertIn("camera_torch=true", args)
+        # La frontal no tiene flash: la linterna no se pide aunque esté marcada
+        args = argumentos_servidor(Ajustes(camara="front", linterna=True), scid=1)
+        self.assertNotIn("camera_torch=true", args)
+        # Un paso fuera de rango se limita
+        args = argumentos_servidor(Ajustes(zoom_paso=999), scid=1)
+        self.assertIn(f"camera_zoom={1.0625 ** ZOOM_PASO_MAX:.6f}", args)
+
+
+class PruebasControl(unittest.TestCase):
+    def test_sin_cambios_no_manda_nada(self):
+        self.assertEqual(mensajes_control(5, 5, True, True), b"")
+
+    def test_zoom_manda_un_paso_por_mensaje(self):
+        self.assertEqual(mensajes_control(0, 3, False, False), bytes([19, 19, 19]))
+        self.assertEqual(mensajes_control(10, 8, False, False), bytes([20, 20]))
+
+    def test_linterna(self):
+        self.assertEqual(mensajes_control(0, 0, False, True), bytes([18, 1]))
+        self.assertEqual(mensajes_control(0, 0, True, False), bytes([18, 0]))
+        self.assertEqual(mensajes_control(2, 3, True, False), bytes([18, 0, 19]))
+
+    def test_el_paso_coincide_con_el_redondeo_de_scrcpy(self):
+        # scrcpy calcula round(log(zoom) / log(1.0625)) antes de cada paso: el zoom inicial
+        # que le pasamos (con 6 decimales) tiene que caer exactamente en nuestro paso.
+        for paso in range(ZOOM_PASO_MAX + 1):
+            inicial = float(f"{zoom_de_paso(paso):.6f}")
+            self.assertEqual(round(math.log(inicial) / math.log(1 + 1 / 16)), paso)
+        self.assertAlmostEqual(zoom_de_paso(ZOOM_PASO_MAX), 4.03, places=2)
+
+    def test_limitar_paso_y_linterna_pedida(self):
+        self.assertEqual(limitar_paso(-3), 0)
+        self.assertEqual(limitar_paso(ZOOM_PASO_MAX + 5), ZOOM_PASO_MAX)
+        self.assertTrue(linterna_pedida(Ajustes(camara="back", linterna=True)))
+        self.assertFalse(linterna_pedida(Ajustes(camara="front", linterna=True)))
+        self.assertFalse(linterna_pedida(Ajustes(camara="back", linterna=False)))
 
 
 class PruebasErroresServidor(unittest.TestCase):

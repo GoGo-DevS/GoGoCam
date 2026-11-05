@@ -57,6 +57,7 @@ def main() -> int:
     parser.add_argument("--rotacion", type=int, default=0, choices=(0, 90, 180, 270))
     parser.add_argument("--camara", default="back", choices=("back", "front"))
     parser.add_argument("--tamano", default="1920x1080")
+    parser.add_argument("--minimizada", action="store_true", help="abrir la ventana minimizada")
     args = parser.parse_args()
 
     archivo = configurar_registro()
@@ -66,7 +67,7 @@ def main() -> int:
 
     from .ui import ejecutar
 
-    ejecutar(CARPETA_DATOS)
+    ejecutar(CARPETA_DATOS, minimizada=args.minimizada)
     return 0
 
 

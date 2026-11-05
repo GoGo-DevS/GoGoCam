@@ -26,7 +26,9 @@ from typing import Callable, Optional
 import av
 import pyvirtualcam
 
-from .frames import a_ppm, tamano_salida, transformar_i420, transformar_rgb
+from .frames import (
+    a_ppm, aplicar_tabla_y, tabla_brillo_contraste, tamano_salida, transformar_i420, transformar_rgb,
+)
 from .protocolo import ErrorDeFlujo, LectorVideo, Paquete, Sesion, VideoDesactivado
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -36,6 +38,16 @@ SERVIDOR_REMOTO = "/data/local/tmp/gogocam-server.jar"
 SDK_MINIMO = 31  # Android 12: lo exige el modo cámara de scrcpy
 CAJA_VISTA_PREVIA = (400, 260)  # el recuadro de la ventana, en píxeles
 CUADROS_POR_MUESTRA = 3  # vista previa a ~10 fps (gasta menos); la cámara virtual recibe TODOS
+
+# Zoom: scrcpy acerca o aleja en pasos de x1,0625 (CameraCapture.ZOOM_FACTOR, siempre alineado
+# a potencias de ese número). GoGoCam guarda el PASO: zoom = 1,0625 ** paso.
+ZOOM_FACTOR = 1 + 1 / 16
+ZOOM_PASO_MAX = 23  # 1,0625**23 ≈ 4,0x; más allá es zoom digital que se ve mal en una reunión
+
+# Mensajes del canal de control (ControlMessage.java de scrcpy 5.0.1)
+TIPO_LINTERNA = 18  # + 1 byte: 1 encender, 0 apagar
+TIPO_ZOOM_MAS = 19
+TIPO_ZOOM_MENOS = 20
 SIN_VENTANA = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # que adb no abra consolas
 
 log = logging.getLogger("gogocam")
@@ -51,16 +63,49 @@ class ServidorCerrado(Exception):
 
 @dataclass
 class Ajustes:
+    # Se fijan al iniciar
     camara: str = "back"  # back | front
     tamano: str = "1920x1080"
     fps: int = 30
     bitrate: int = 12_000_000
-    rotacion: int = 0  # horaria: 0, 90, 180, 270 (se puede cambiar en vivo)
-    espejo: bool = False  # se puede cambiar en vivo
+    # Se cambian en vivo
+    rotacion: int = 0  # horaria: 0, 90, 180, 270
+    espejo: bool = False
+    brillo: int = 0  # -50 a 50
+    contraste: int = 100  # 50 a 150 (%)
+    zoom_paso: int = 0  # 0 a ZOOM_PASO_MAX (ver zoom_de_paso)
+    linterna: bool = False  # solo la cámara trasera tiene flash
+    # De la ventana
     vista_previa: bool = True
+    autoiniciar: bool = False
+    tema_oscuro: bool = True
 
     def a_dict(self) -> dict:
         return asdict(self)
+
+
+def zoom_de_paso(paso: int) -> float:
+    return ZOOM_FACTOR ** paso
+
+
+def limitar_paso(paso: int) -> int:
+    return min(max(int(paso), 0), ZOOM_PASO_MAX)
+
+
+def linterna_pedida(ajustes: Ajustes) -> bool:
+    return ajustes.linterna and ajustes.camara == "back"
+
+
+def mensajes_control(paso_actual: int, paso_deseado: int,
+                     linterna_actual: bool, linterna_deseada: bool) -> bytes:
+    """Bytes a mandar por el canal de control para pasar del estado actual al deseado."""
+    mensajes = b""
+    if linterna_deseada != linterna_actual:
+        mensajes += bytes([TIPO_LINTERNA, 1 if linterna_deseada else 0])
+    diferencia = paso_deseado - paso_actual
+    if diferencia:
+        mensajes += bytes([TIPO_ZOOM_MAS if diferencia > 0 else TIPO_ZOOM_MENOS]) * abs(diferencia)
+    return mensajes
 
 
 # ---------------------------------------------------------------- adb
@@ -128,13 +173,15 @@ def elegir_telefono(salida_devices: str) -> str:
 
 def argumentos_servidor(ajustes: Ajustes, scid: int) -> list[str]:
     """Comando para `adb shell`. El scid va en hexadecimal: así lo lee el servidor."""
-    return [
+    argumentos = [
         f"CLASSPATH={SERVIDOR_REMOTO}",
         "app_process", "/", "com.genymobile.scrcpy.Server", VERSION_SERVIDOR,
         f"scid={scid:08x}",
         "log_level=info",
         "tunnel_forward=true",
-        "video=true", "audio=false", "control=false", "cleanup=false",
+        # control=true: canal para zoom y linterna en vivo. En modo cámara scrcpy no inyecta
+        # toques ni sincroniza el portapapeles, y no manda nada de vuelta por ese canal.
+        "video=true", "audio=false", "control=true", "cleanup=false",
         "video_source=camera",
         f"camera_facing={ajustes.camara}",
         f"camera_size={ajustes.tamano}",
@@ -143,6 +190,12 @@ def argumentos_servidor(ajustes: Ajustes, scid: int) -> list[str]:
         f"video_bit_rate={ajustes.bitrate}",
         "send_device_meta=false",
     ]
+    paso = limitar_paso(ajustes.zoom_paso)
+    if paso:
+        argumentos.append(f"camera_zoom={zoom_de_paso(paso):.6f}")
+    if linterna_pedida(ajustes):
+        argumentos.append("camera_torch=true")
+    return argumentos
 
 
 NOMBRES_APPS = {
@@ -282,6 +335,11 @@ class Transmision:
         self._parar = threading.Event()
         self._hilo: Optional[threading.Thread] = None
         self._sock: Optional[socket.socket] = None
+        self._control: Optional[socket.socket] = None
+        # Lo que el teléfono ya tiene aplicado (al arrancar, lo que se le pasó por argumento)
+        self._paso_aplicado = limitar_paso(ajustes.zoom_paso)
+        self._linterna_aplicada = linterna_pedida(ajustes)
+        self._tabla: tuple[tuple[int, int], Optional["np.ndarray"]] = ((0, 100), None)
         self._proc: Optional[subprocess.Popen] = None
         self._tunel: Optional[tuple[str, str, int]] = None
         self._registro_servidor: collections.deque[str] = collections.deque(maxlen=300)
@@ -294,12 +352,12 @@ class Transmision:
 
     def detener(self, esperar: float = 5.0) -> None:
         self._parar.set()
-        sock = self._sock
-        if sock is not None:
-            try:
-                sock.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
+        for sock in (self._sock, self._control):
+            if sock is not None:
+                try:
+                    sock.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
         if self._hilo is not None and threading.current_thread() is not self._hilo:
             self._hilo.join(esperar)
 
@@ -356,6 +414,10 @@ class Transmision:
         try:
             puerto = self._preparar_telefono()
             self._sock = self._conectar(puerto)
+            # El teléfono acepta primero el video y después el control; recién con los dos
+            # conectados empieza a mandar video.
+            self._control = socket.create_connection(("127.0.0.1", puerto), timeout=5)
+            self._control.settimeout(2)
             lector = LectorVideo(self._sock)
             lector.leer_codec()
             self._transmitir(lector)
@@ -456,8 +518,12 @@ class Transmision:
                     if cuadro.format.name not in ("yuv420p", "yuvj420p"):
                         cuadro = cuadro.reformat(format="yuv420p")
                     rotacion, espejo = self.ajustes.rotacion, self.ajustes.espejo
+                    crudo = cuadro.to_ndarray()
+                    tabla = self._tabla_actual()
+                    if tabla is not None:
+                        crudo = aplicar_tabla_y(crudo, cuadro.width, cuadro.height, tabla)
                     datos, ancho, alto = transformar_i420(
-                        cuadro.to_ndarray(), cuadro.width, cuadro.height, rotacion, espejo
+                        crudo, cuadro.width, cuadro.height, rotacion, espejo
                     )
                     if dims_camara != (ancho, alto):
                         if camara is not None:
@@ -467,6 +533,9 @@ class Transmision:
                         self.tamano_salida = dims_camara
                         self._avisar("ok", f"Transmitiendo {ancho}x{alto} a «{camara.device}».")
                     camara.send(datos)
+                    # Con cuadros llegando la cámara del teléfono ya está lista: antes de eso
+                    # descarta los mensajes de control sin avisar.
+                    self._sincronizar_controles()
 
                     self.cuadros += 1
                     cuadros_ventana += 1
@@ -476,10 +545,45 @@ class Transmision:
                         ventana_inicio, cuadros_ventana = ahora, 0
                     if (self.ajustes.vista_previa and not self.vista_oculta
                             and self.cuadros % CUADROS_POR_MUESTRA == 0):
-                        self.vista_previa = self._muestra(cuadro, rotacion, espejo)
+                        fuente = cuadro if tabla is None else self._cuadro_desde(crudo, cuadro)
+                        self.vista_previa = self._muestra(fuente, rotacion, espejo)
         finally:
             if camara is not None:
                 camara.close()
+
+    def _tabla_actual(self) -> Optional["np.ndarray"]:
+        clave = (int(self.ajustes.brillo), int(self.ajustes.contraste))
+        if clave != self._tabla[0]:
+            self._tabla = (clave, tabla_brillo_contraste(*clave))
+        return self._tabla[1]
+
+    @staticmethod
+    def _cuadro_desde(crudo: "np.ndarray", original: av.VideoFrame) -> av.VideoFrame:
+        """Cuadro con brillo y contraste aplicados, para que la vista previa muestre lo mismo
+        que recibe la reunión."""
+        arreglo = crudo.reshape(original.height * 3 // 2, original.width)
+        try:
+            return av.VideoFrame.from_ndarray(arreglo, format=original.format.name)
+        except ValueError:
+            return av.VideoFrame.from_ndarray(arreglo, format="yuv420p")
+
+    def _sincronizar_controles(self) -> None:
+        if self._control is None:
+            return
+        paso, linterna = limitar_paso(self.ajustes.zoom_paso), linterna_pedida(self.ajustes)
+        if paso == self._paso_aplicado and linterna == self._linterna_aplicada:
+            return
+        mensajes = mensajes_control(self._paso_aplicado, paso, self._linterna_aplicada, linterna)
+        try:
+            self._control.sendall(mensajes)
+        except OSError as e:
+            # El video sigue; solo se pierde el control en vivo.
+            log.warning("no pude mandar zoom/linterna al teléfono: %s", e)
+            self._control = None
+            self._avisar("info", "El zoom y la linterna quedaron fijos hasta volver a iniciar.")
+            return
+        log.info("control: zoom %.2fx, linterna %s", zoom_de_paso(paso), "sí" if linterna else "no")
+        self._paso_aplicado, self._linterna_aplicada = paso, linterna
 
     @staticmethod
     def _muestra(cuadro: av.VideoFrame, rotacion: int, espejo: bool) -> bytes:
@@ -491,11 +595,12 @@ class Transmision:
         return a_ppm(transformar_rgb(rgb, rotacion, espejo))
 
     def _limpiar(self) -> None:
-        if self._sock is not None:
-            try:
-                self._sock.close()
-            except OSError:
-                pass
+        for sock in (self._sock, self._control):
+            if sock is not None:
+                try:
+                    sock.close()
+                except OSError:
+                    pass
         if self._proc is not None and self._proc.poll() is None:
             self._proc.terminate()
             try:

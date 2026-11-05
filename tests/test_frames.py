@@ -2,7 +2,9 @@ import unittest
 
 import numpy as np
 
-from gogocam.frames import a_ppm, tamano_salida, transformar_i420, transformar_rgb
+from gogocam.frames import (
+    a_ppm, aplicar_tabla_y, tabla_brillo_contraste, tamano_salida, transformar_i420, transformar_rgb,
+)
 
 
 def cuadro_i420(ancho: int, alto: int):
@@ -82,6 +84,35 @@ class PruebasFrames(unittest.TestCase):
         ppm = a_ppm(girada)
         self.assertTrue(ppm.startswith(b"P6 2 4 255\n"))
         self.assertEqual(len(ppm), len(b"P6 2 4 255\n") + 2 * 4 * 3)
+
+
+class PruebasBrilloContraste(unittest.TestCase):
+    def test_neutro_no_hace_nada(self):
+        self.assertIsNone(tabla_brillo_contraste(0, 100))
+
+    def test_brillo_suma_y_se_corta_en_los_bordes(self):
+        tabla = tabla_brillo_contraste(30, 100)
+        self.assertEqual(tabla[100], 130)
+        self.assertEqual(tabla[240], 255)
+        self.assertEqual(tabla_brillo_contraste(-30, 100)[10], 0)
+
+    def test_contraste_estira_alrededor_del_gris(self):
+        tabla = tabla_brillo_contraste(0, 150)
+        self.assertEqual(tabla[128], 128)  # el gris medio no se mueve
+        self.assertEqual(tabla[148], 158)  # +20 -> +30
+        self.assertEqual(tabla[108], 98)
+        menos = tabla_brillo_contraste(0, 50)
+        self.assertEqual(menos[228], 178)  # +100 -> +50
+
+    def test_solo_toca_la_luz_no_el_color(self):
+        ancho, alto = 4, 2
+        datos = cuadro_i420(ancho, alto)[0]
+        color_antes = datos[ancho * alto:].copy()
+        tabla = tabla_brillo_contraste(10, 100)
+        y_antes = datos[: ancho * alto].copy()
+        salida = aplicar_tabla_y(datos, ancho, alto, tabla)
+        np.testing.assert_array_equal(salida[: ancho * alto], y_antes + 10)
+        np.testing.assert_array_equal(salida[ancho * alto:], color_antes)
 
 
 if __name__ == "__main__":

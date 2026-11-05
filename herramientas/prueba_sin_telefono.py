@@ -58,26 +58,45 @@ def separar_config(au: bytes) -> tuple[bytes, bytes]:
     return config, resto
 
 
-def telefono_falso(servidor: socket.socket, paquetes: list[tuple[bytes, bool]], parar: threading.Event):
+def _leer_control(conexion: socket.socket, recibido: bytearray) -> None:
+    with conexion:
+        while True:
+            try:
+                datos = conexion.recv(4096)
+            except OSError:
+                return
+            if not datos:
+                return
+            recibido.extend(datos)
+
+
+def telefono_falso(servidor: socket.socket, paquetes: list[tuple[bytes, bool]], parar: threading.Event,
+                   control_recibido: bytearray | None = None):
+    """Como el servidor real: acepta el video (y le manda el byte de prueba), después el
+    control, y recién ahí manda video. Lo que llega por el control queda en control_recibido."""
     conexion, _ = servidor.accept()
     with conexion:
-        conexion.sendall(b"\x00" + struct.pack(">I", CODEC_H264) + struct.pack(">III", 0x80000000, ANCHO, ALTO))
+        conexion.sendall(b"\x00")
+        control, _ = servidor.accept()
+        threading.Thread(target=_leer_control, args=(control, control_recibido if control_recibido is not None
+                                                     else bytearray()), daemon=True).start()
+        conexion.sendall(struct.pack(">I", CODEC_H264) + struct.pack(">III", 0x80000000, ANCHO, ALTO))
         pts = 0
-        while not parar.is_set():
-            for datos, clave in paquetes:
-                if parar.is_set():
-                    return
-                if clave:
-                    config, datos = separar_config(datos)
-                    if config:
-                        conexion.sendall(struct.pack(">QI", FLAG_CONFIG, len(config)) + config)
-                flags = pts | (FLAG_CLAVE if clave else 0)
-                try:
+        try:
+            while not parar.is_set():
+                for datos, clave in paquetes:
+                    if parar.is_set():
+                        return
+                    if clave:
+                        config, datos = separar_config(datos)
+                        if config:
+                            conexion.sendall(struct.pack(">QI", FLAG_CONFIG, len(config)) + config)
+                    flags = pts | (FLAG_CLAVE if clave else 0)
                     conexion.sendall(struct.pack(">QI", flags, len(datos)) + datos)
-                except OSError:
-                    return
-                pts += 1_000_000 // FPS
-                time.sleep(1 / FPS)
+                    pts += 1_000_000 // FPS
+                    time.sleep(1 / FPS)
+        except OSError:
+            return  # GoGoCam cerró la conexión: fin normal de la prueba
 
 
 class TransmisionDePrueba(Transmision):
