@@ -1,0 +1,3 @@
+av==19.0.2
+numpy==2.5.4
+pyvirtualcam==0.15.0
