@@ -74,8 +74,15 @@ py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m unittest discover -s tests -t .      # pruebas
 .\.venv\Scripts\python.exe herramientas\prueba_sin_telefono.py      # cadena completa sin teléfono
 .\.venv\Scripts\python.exe -m gogocam --prueba 10                   # 10 s con el teléfono real, sin ventana
+.\.venv\Scripts\python.exe -m gogocam --diagnostico                 # ¿falta algo? (no toca el teléfono)
 .\.venv\Scripts\python.exe herramientas\generar_icono.py            # vuelve a dibujar recursos/gogocam.*
 ```
+
+`--diagnostico` (también en el .exe) revisa, **sin tocar el teléfono**, el servidor de
+scrcpy (SHA-256), adb (`adb version`, que no arranca el servidor de adb), el
+decodificador H.264 y que «OBS Virtual Camera» esté registrada en Windows, sin
+abrirla: se puede correr en plena llamada. Deja el resultado en `gogocam.log` y
+sale con código 0 si todo está bien.
 
 `prueba_sin_telefono.py` levanta un teléfono falso que habla el mismo protocolo
 y comprueba, leyendo la cámara virtual con ffmpeg, que llega la imagen real y no
@@ -91,8 +98,32 @@ Estructura:
   `Streamer.java` y `DesktopConnection.java` de esa versión).
 - `gogocam/frames.py`: rotación, espejo, brillo y contraste sobre I420, sin pasar por RGB.
 - `gogocam/ui.py`: la ventana (Tkinter, tema `clam` con los colores de GoGoDevS).
-- `gogocam/sistema.py`: ícono, barra de título oscura y abrir con Windows.
+- `gogocam/sistema.py`: ícono, barra de título oscura y abrir con Windows (apunta
+  al .exe si está empaquetada).
+- `gogocam/diagnostico.py`: el `--diagnostico`.
 - `recursos/`: ícono (lo dibuja `herramientas/generar_icono.py`).
+- `lanzador.py`, `herramientas/empaquetar.py` y `distribucion/`: el .exe para compartir.
+
+## Compartir (GoGoCam.exe)
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-empaquetar.txt
+.\.venv\Scripts\python.exe herramientas\empaquetar.py
+```
+
+Deja `dist\GoGoCam-<versión>.zip` (~54 MB): una carpeta con `GoGoCam.exe`
+(PyInstaller, sin consola), adb y el servidor de scrcpy dentro, el
+`LEEME.txt` para quien lo recibe (fuente: `distribucion/LEEME.txt`) y
+`licencias/` con el código fuente. Quien lo recibe **solo necesita OBS Studio**
+instalado; ni Python ni adb.
+
+Empaquetada, GoGoCam busca primero el adb que trae adentro (versión conocida) y
+sus archivos en `_internal` (`sys._MEIPASS`). Subir la versión en
+`gogocam/__init__.py` antes de armar un paquete nuevo.
+
+**Licencias:** pyvirtualcam es GPL-2.0, así que el .exe se reparte junto con su
+código fuente (`licencias/codigo-fuente-gogocam.zip`, lo arma el script). Para
+venderlo cerrado habría que reemplazar pyvirtualcam.
 
 **Actualizar scrcpy:** el servidor y el cliente tienen que ser exactamente de la
 misma versión. Baja `scrcpy-server-vX.Y.Z` de la release oficial, verifica su

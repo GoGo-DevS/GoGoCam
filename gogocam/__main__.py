@@ -2,6 +2,9 @@
 
     pythonw -m gogocam                  abre la ventana
     python  -m gogocam --prueba 10      transmite 10 s sin ventana e informa
+    python  -m gogocam --diagnostico    revisa que no falte nada, sin tocar el teléfono
+
+En el .exe empaquetado son los mismos argumentos: GoGoCam.exe --diagnostico.
 """
 from __future__ import annotations
 
@@ -58,9 +61,18 @@ def main() -> int:
     parser.add_argument("--camara", default="back", choices=("back", "front"))
     parser.add_argument("--tamano", default="1920x1080")
     parser.add_argument("--minimizada", action="store_true", help="abrir la ventana minimizada")
+    parser.add_argument("--diagnostico", action="store_true", help="revisar que no falte nada (no toca el teléfono)")
     args = parser.parse_args()
 
     archivo = configurar_registro()
+    if args.diagnostico:
+        from .diagnostico import revisar
+
+        resultados = revisar()
+        for nombre, ok, detalle in resultados:
+            print(f"{'OK   ' if ok else 'FALLA'} {nombre}: {detalle}")
+        print(f"registro: {archivo}")
+        return 0 if all(ok for _, ok, _ in resultados) else 1
     if args.prueba:
         print(f"registro: {archivo}")
         return prueba_sin_ventana(args.prueba, args.rotacion, args.camara, args.tamano)

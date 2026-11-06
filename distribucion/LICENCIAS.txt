@@ -1,0 +1,25 @@
+GoGoCam - componentes y licencias
+
+GoGoCam (c) GoGoDevS. Como incluye pyvirtualcam (GPL-2.0), GoGoCam se entrega
+junto con su código fuente completo: codigo-fuente-gogocam.zip, en esta carpeta.
+
+Componentes de terceros que vienen dentro:
+
+- Servidor de scrcpy 5.0.1 (Genymobile), sin modificar - Apache License 2.0.
+  https://github.com/Genymobile/scrcpy - texto: scrcpy-LICENSE.txt
+
+- adb, de Android SDK Platform-Tools (Google) - avisos: adb-NOTICE.txt
+
+- pyvirtualcam (Maik Riechert) - GNU GPL v2. https://github.com/letmaik/pyvirtualcam
+  Texto: pyvirtualcam/
+
+- PyAV - BSD 3-Clause. https://github.com/PyAV-Org/PyAV - texto: av/
+  Incluye bibliotecas de FFmpeg (LGPL 2.1 o posterior): https://ffmpeg.org/legal.html
+
+- NumPy - BSD 3-Clause. https://numpy.org - texto: numpy/
+
+- Python 3 (Python Software Foundation License) y Tcl/Tk (licencia BSD),
+  empaquetados con PyInstaller (GPL con excepción para programas empaquetados).
+
+GoGoCam usa la cámara virtual de OBS Studio, que se instala por separado
+(https://obsproject.com, GPL-2.0).

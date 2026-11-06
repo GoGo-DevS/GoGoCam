@@ -1,0 +1,58 @@
+GoGoCam 1.0 - la cámara de tu teléfono como cámara web del PC
+Hecha por GoGoDevS. Gratis, sin publicidad y sin funciones bloqueadas.
+Funciona por cable USB y no hay que instalar nada en el teléfono.
+
+
+LO QUE NECESITAS
+- Un PC con Windows 10 u 11.
+- Un teléfono Android 12 o más nuevo (con iPhone no funciona).
+- Un cable USB que transmita datos (hay cables que solo cargan).
+- OBS Studio instalado: https://obsproject.com/es/download
+  Se instala una sola vez y no hace falta abrirlo nunca: GoGoCam usa su cámara virtual.
+
+
+EN EL TELÉFONO (solo la primera vez)
+1. Activa las opciones de desarrollador: en Ajustes > Acerca del teléfono, toca 7 veces
+   «Número de compilación». En Xiaomi es «Versión de MIUI» o «Versión del SO»; en Samsung
+   está dentro de «Información de software».
+2. Entra a «Opciones de desarrollador» y activa «Depuración USB».
+   En Xiaomi está en Ajustes > Ajustes adicionales; en Samsung, al final de Ajustes;
+   en Motorola y Pixel, en Ajustes > Sistema.
+3. Conecta el teléfono al PC con el cable. En el teléfono aparece «¿Permitir depuración USB?»:
+   marca «Permitir siempre desde este equipo» y acepta.
+
+
+EN EL PC
+1. Descomprime el .zip en una carpeta fija (por ejemplo en Documentos).
+   No abras GoGoCam desde dentro del .zip.
+2. Abre GoGoCam.exe y presiona Iniciar.
+   La primera vez Windows puede mostrar «Windows protegió su PC». Aparece porque la app es
+   nueva y no está firmada: toca «Más información» y después «Ejecutar de todas formas».
+3. En Meet, Zoom, Teams, Discord u OBS elige la cámara «OBS Virtual Camera».
+
+Para tenerla en el escritorio: clic derecho en GoGoCam.exe > Mostrar más opciones >
+Enviar a > Escritorio (crear acceso directo).
+
+
+TIPS
+- Puedes minimizarla: sigue transmitiendo igual.
+- Con poca luz, en la pestaña Calidad elige 20 fps: la imagen sale bastante más clara.
+- La cámara trasera se ve mejor que la de selfie. Se cambia en la pestaña Calidad.
+- Si el teléfono está vertical, gira la imagen en la pestaña Imagen > Rotación.
+- En la pestaña Imagen tienes brillo, contraste, zoom y linterna, y todo cambia en vivo.
+
+
+SI ALGO FALLA
+- «No veo ningún teléfono»: prueba con otro cable y revisa que la depuración USB esté activa.
+  En algunos Samsung falta el driver: búscalo en Google como «Samsung USB Driver».
+- «Falta el permiso»: desbloquea el teléfono y acepta el aviso de depuración USB.
+- «La cámara la está usando otra app»: cierra la cámara o DroidCam en el teléfono.
+- «Falta OBS Studio»: instálalo desde el enlace de arriba.
+- La imagen se corta después de unos minutos: en Opciones de desarrollador activa la opción
+  que deja la pantalla encendida mientras carga (se llama «Pantalla activa» o parecido) y
+  presiona Iniciar de nuevo.
+- Si no se arregla, mándale a Diego el registro: abre el Explorador, escribe
+  %LOCALAPPDATA%\GoGoCam en la barra de direcciones y adjunta el archivo gogocam.log.
+
+
+Licencias y código fuente: carpeta «licencias».

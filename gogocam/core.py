@@ -17,6 +17,7 @@ import random
 import shutil
 import socket
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -31,7 +32,14 @@ from .frames import (
 )
 from .protocolo import ErrorDeFlujo, LectorVideo, Paquete, Sesion, VideoDesactivado
 
-RAIZ = Path(__file__).resolve().parent.parent
+def carpeta_programa() -> Path:
+    """Donde están vendor/ y recursos/. En el .exe de PyInstaller viven en sys._MEIPASS
+    (la carpeta _internal); desde el código fuente, en la raíz del proyecto."""
+    empaquetada = getattr(sys, "_MEIPASS", None)
+    return Path(empaquetada) if empaquetada else Path(__file__).resolve().parent.parent
+
+
+RAIZ = carpeta_programa()
 VERSION_SERVIDOR = "5.0.1"
 SERVIDOR_LOCAL = RAIZ / "vendor" / f"scrcpy-server-v{VERSION_SERVIDOR}"
 SERVIDOR_REMOTO = "/data/local/tmp/gogocam-server.jar"
@@ -113,13 +121,18 @@ def mensajes_control(paso_actual: int, paso_deseado: int,
 def buscar_adb() -> str:
     candidatos = [
         os.environ.get("GOGOCAM_ADB"),
+        str(RAIZ / "vendor" / "adb.exe"),  # el que trae el .exe empaquetado: versión conocida
         shutil.which("adb"),
         str(Path(os.environ.get("LOCALAPPDATA", "")) / "Android" / "Sdk" / "platform-tools" / "adb.exe"),
-        str(RAIZ / "vendor" / "adb.exe"),
     ]
     for candidato in candidatos:
         if candidato and Path(candidato).is_file():
             return candidato
+    if getattr(sys, "frozen", False):  # el .exe trae su adb: si falta, la carpeta quedó incompleta
+        raise GoGoCamError(
+            "Falta adb.exe dentro de la carpeta de GoGoCam. Vuelve a descomprimir el .zip completo; "
+            "si tu antivirus lo borró, permítelo y descomprime de nuevo."
+        )
     raise GoGoCamError(
         "No encontré adb. Instala Android Platform Tools o define la variable GOGOCAM_ADB "
         "con la ruta de adb.exe."
@@ -302,16 +315,25 @@ def puerto_libre() -> int:
         return s.getsockname()[1]
 
 
+FALTA_OBS = ("Falta OBS Studio en este PC. Instálalo gratis desde obsproject.com (una sola vez; "
+             "no hace falta abrirlo) y vuelve a presionar Iniciar.")
+
+
+def mensaje_camara_virtual(detalle: str) -> str:
+    """Traduce el error de pyvirtualcam a algo que se entienda sin saber qué es un backend."""
+    if "not found" in detalle or "install" in detalle.lower():  # «device not found! Did you install OBS?»
+        return FALTA_OBS
+    return ("No pude abrir «OBS Virtual Camera». Si OBS tiene su cámara virtual encendida, "
+            f"apágala o cierra OBS y vuelve a intentar. (Detalle: {detalle})")
+
+
 def abrir_camara_virtual(ancho: int, alto: int, fps: int) -> pyvirtualcam.Camera:
     try:
         return pyvirtualcam.Camera(
             width=ancho, height=alto, fps=fps, fmt=pyvirtualcam.PixelFormat.I420, backend="obs"
         )
     except RuntimeError as e:
-        raise GoGoCamError(
-            "No pude abrir «OBS Virtual Camera». Si OBS tiene su cámara virtual encendida, "
-            f"apágala o cierra OBS y vuelve a intentar. (Detalle: {e})"
-        ) from e
+        raise GoGoCamError(mensaje_camara_virtual(str(e))) from e
 
 
 # ---------------------------------------------------------------- transmisión
