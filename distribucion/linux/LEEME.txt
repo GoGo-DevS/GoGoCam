@@ -63,7 +63,9 @@ SI ALGO FALLA
 - La imagen se corta después de unos minutos: en Opciones de desarrollador del teléfono
   activa la opción que deja la pantalla encendida mientras carga (se llama «Pantalla activa»
   o parecido) y presiona Iniciar de nuevo.
-- Si no se arregla, mándale a Diego el archivo ~/.local/share/gogocam/gogocam.log
+- Si no se arregla, cuéntanos en https://github.com/GoGo-DevS/GoGoCam/issues y adjunta
+  el archivo ~/.local/share/gogocam/gogocam.log
+- Esta versión para Linux es nueva: si te funcionó (o no), también nos sirve saberlo.
 
 
 ACTUALIZAR O DESINSTALAR

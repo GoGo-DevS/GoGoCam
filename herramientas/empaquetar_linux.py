@@ -25,7 +25,7 @@ DIST = RAIZ / "dist"
 CARPETA = f"GoGoCam-{__version__}-linux"
 LINUX = RAIZ / "distribucion" / "linux"
 SERVIDOR = RAIZ / "vendor" / "scrcpy-server-v5.0.1"
-TEXTO = {".py", ".sh", ".txt", ".md"}
+TEXTO = {".py", ".sh", ".txt", ".md", ""}  # "" = LICENSE
 
 
 def archivos() -> list[tuple[Path, str]]:
@@ -35,7 +35,7 @@ def archivos() -> list[tuple[Path, str]]:
               (RAIZ / "vendor" / "LICENSE-scrcpy.txt", "vendor/LICENSE-scrcpy.txt"),
               (RAIZ / "vendor" / "SHA256SUMS.txt", "vendor/SHA256SUMS.txt")]
     lista += [(p, f"recursos/{p.name}") for p in sorted((RAIZ / "recursos").glob("*.png"))]
-    lista += [(RAIZ / "requirements-linux.txt", "requirements-linux.txt")]
+    lista += [(RAIZ / "requirements-linux.txt", "requirements-linux.txt"), (RAIZ / "LICENSE", "LICENSE")]
     lista += [(LINUX / n, n) for n in ("instalar.sh", "desinstalar.sh", "LEEME.txt", "LICENCIAS.txt")]
     return lista
 

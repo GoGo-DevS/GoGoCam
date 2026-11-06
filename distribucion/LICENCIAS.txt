@@ -1,7 +1,9 @@
 GoGoCam - componentes y licencias
 
-GoGoCam (c) GoGoDevS. Como incluye pyvirtualcam (GPL-2.0), GoGoCam se entrega
-junto con su código fuente completo: codigo-fuente-gogocam.zip, en esta carpeta.
+GoGoCam (c) 2026 GoGoDevS, licencia MIT (texto en LICENSE, dentro de
+codigo-fuente-gogocam.zip). Como incluye pyvirtualcam (GPL-2.0), se entrega junto
+con su código fuente completo: codigo-fuente-gogocam.zip, en esta carpeta, y en
+https://github.com/GoGo-DevS/GoGoCam
 
 Componentes de terceros que vienen dentro:
 

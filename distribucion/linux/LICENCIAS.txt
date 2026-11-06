@@ -1,6 +1,7 @@
 GoGoCam para Linux - componentes y licencias
 
-GoGoCam (c) GoGoDevS. Esta carpeta ES el código fuente completo de GoGoCam.
+GoGoCam (c) 2026 GoGoDevS, licencia MIT (texto en LICENSE). Esta carpeta es el
+código fuente completo de GoGoCam: https://github.com/GoGo-DevS/GoGoCam
 
 Viene dentro:
 

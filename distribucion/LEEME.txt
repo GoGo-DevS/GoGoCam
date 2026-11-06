@@ -51,8 +51,11 @@ SI ALGO FALLA
 - La imagen se corta después de unos minutos: en Opciones de desarrollador activa la opción
   que deja la pantalla encendida mientras carga (se llama «Pantalla activa» o parecido) y
   presiona Iniciar de nuevo.
-- Si no se arregla, mándale a Diego el registro: abre el Explorador, escribe
-  %LOCALAPPDATA%\GoGoCam en la barra de direcciones y adjunta el archivo gogocam.log.
+- Si no se arregla, cuéntanos en https://github.com/GoGo-DevS/GoGoCam/issues y adjunta
+  el registro: abre el Explorador, escribe %LOCALAPPDATA%\GoGoCam en la barra de
+  direcciones y ahí está el archivo gogocam.log.
+
+Versiones nuevas: https://github.com/GoGo-DevS/GoGoCam/releases
 
 
 Licencias y código fuente: carpeta «licencias».

@@ -1,31 +1,58 @@
 # GoGoCam
 
-La cámara del teléfono como cámara web del PC, por USB, sin publicidad y sin
-funciones bloqueadas. En el teléfono **no se instala ninguna app**.
+La cámara de tu teléfono Android como cámara web del PC, por cable USB. Gratis,
+sin publicidad y sin funciones bloqueadas. En el teléfono **no se instala
+ninguna app**.
+
+Hecho por [GoGoDevS](https://gogodevs.cl) · Licencia MIT.
+
+## Descargar
+
+En **[Releases](https://github.com/GoGo-DevS/GoGoCam/releases/latest)**:
+
+- **Windows 10 y 11:** `GoGoCam-1.0.0.zip`. Descomprime y abre `GoGoCam.exe`.
+  Necesitas [OBS Studio](https://obsproject.com/es/download) instalado (no hace
+  falta abrirlo: GoGoCam usa su cámara virtual). Como la app es nueva y no está
+  firmada, la primera vez Windows muestra «Windows protegió su PC»: toca «Más
+  información» y «Ejecutar de todas formas».
+- **Linux (beta):** `GoGoCam-1.0.0-linux.tar.gz`. Descomprime y corre
+  `./instalar.sh`. Es nueva y todavía no la probamos en un Linux real: si la
+  instalas, cuéntanos cómo te fue en
+  [Issues](https://github.com/GoGo-DevS/GoGoCam/issues).
+
+Necesitas un teléfono **Android 12 o más nuevo** y un cable USB que transmita
+datos. Cada descarga trae un `LEEME.txt` con los pasos, incluido cómo activar
+la depuración USB en el teléfono.
+
+¿Algo no funciona? Abre un [issue](https://github.com/GoGo-DevS/GoGoCam/issues)
+y adjunta el archivo `gogocam.log` (el LEEME dice dónde está).
+
+## Cómo funciona
 
 ```
-Teléfono (Android 12+)  --USB-->  GoGoCam (PC)  -->  «OBS Virtual Camera»  -->  Meet, Zoom, OBS, Teams…
- servidor de scrcpy                decodifica          cámara web virtual
- captura la cámara                 rota / espejo
+Teléfono (Android 12+)  --USB-->  GoGoCam (PC)  -->  cámara virtual  -->  Meet, Zoom, OBS, Teams…
+ servidor de scrcpy                decodifica        Windows: «OBS Virtual Camera»
+ captura la cámara                 rota / espejo     Linux: v4l2loopback «GoGoCam»
  y manda H.264
 ```
 
-## Requisitos
+## Requisitos (desde el código fuente)
 
-- Windows 10/11.
+- Windows 10/11 o Linux, con Python 3.10 o más nuevo.
 - Teléfono Android 12 o superior con **depuración USB** activa
   (Ajustes > Opciones de desarrollador). La primera vez el teléfono pide
   «Permitir depuración USB»: hay que aceptar.
-- **OBS Studio instalado.** GoGoCam usa su cámara virtual; OBS no necesita estar
-  abierto.
+- Windows: **OBS Studio instalado** (GoGoCam usa su cámara virtual; OBS no
+  necesita estar abierto). Linux: v4l2loopback (ver [Linux](#linux)).
 - `adb` (Android Platform Tools). Se busca en `GOGOCAM_ADB`, en el PATH y en
-  `%LOCALAPPDATA%\Android\Sdk\platform-tools`.
+  el SDK de Android (`%LOCALAPPDATA%\Android\Sdk` o `~/Android/Sdk`).
 
 ## Uso
 
 1. Conecta el teléfono por USB.
-2. Abre **GoGoCam** (acceso directo del escritorio) y presiona **Iniciar**.
-3. En la app donde la quieras usar, elige la cámara **«OBS Virtual Camera»**.
+2. Abre **GoGoCam** y presiona **Iniciar**.
+3. En la app donde la quieras usar, elige la cámara **«OBS Virtual Camera»**
+   (Windows) o **«GoGoCam»** (Linux).
 
 Se puede **minimizar**: sigue transmitiendo igual (la barra de tareas dice
 «GoGoCam · transmitiendo») y deja de dibujar la vista previa para gastar menos.
@@ -159,6 +186,7 @@ SHA-256 con `SHA256SUMS.txt`, déjalo en `vendor/`, cambia `VERSION_SERVIDOR` en
 
 ## Licencias
 
+- GoGoCam: licencia MIT (`LICENSE`), © 2026 GoGoDevS.
 - `vendor/scrcpy-server-v5.0.1` es el servidor oficial de
   [scrcpy](https://github.com/Genymobile/scrcpy) (Genymobile), sin modificar,
   bajo licencia Apache 2.0 (`vendor/LICENSE-scrcpy.txt`). SHA-256 en
