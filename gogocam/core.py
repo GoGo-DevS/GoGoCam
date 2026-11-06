@@ -39,6 +39,7 @@ def carpeta_programa() -> Path:
     return Path(empaquetada) if empaquetada else Path(__file__).resolve().parent.parent
 
 
+ES_WINDOWS = sys.platform == "win32"  # si no, Linux (macOS no está soportado)
 RAIZ = carpeta_programa()
 VERSION_SERVIDOR = "5.0.1"
 SERVIDOR_LOCAL = RAIZ / "vendor" / f"scrcpy-server-v{VERSION_SERVIDOR}"
@@ -119,11 +120,13 @@ def mensajes_control(paso_actual: int, paso_deseado: int,
 # ---------------------------------------------------------------- adb
 
 def buscar_adb() -> str:
+    nombre = "adb.exe" if ES_WINDOWS else "adb"
+    sdk = (Path(os.environ.get("LOCALAPPDATA", "")) if ES_WINDOWS else Path.home()) / "Android" / "Sdk"
     candidatos = [
         os.environ.get("GOGOCAM_ADB"),
-        str(RAIZ / "vendor" / "adb.exe"),  # el que trae el .exe empaquetado: versión conocida
+        str(RAIZ / "vendor" / nombre),  # el que trae el .exe empaquetado: versión conocida
         shutil.which("adb"),
-        str(Path(os.environ.get("LOCALAPPDATA", "")) / "Android" / "Sdk" / "platform-tools" / "adb.exe"),
+        str(sdk / "platform-tools" / nombre),
     ]
     for candidato in candidatos:
         if candidato and Path(candidato).is_file():
@@ -132,6 +135,11 @@ def buscar_adb() -> str:
         raise GoGoCamError(
             "Falta adb.exe dentro de la carpeta de GoGoCam. Vuelve a descomprimir el .zip completo; "
             "si tu antivirus lo borró, permítelo y descomprime de nuevo."
+        )
+    if not ES_WINDOWS:
+        raise GoGoCamError(
+            "No encontré adb. Vuelve a correr instalar.sh, o instálalo a mano "
+            "(Ubuntu, Mint o Debian: sudo apt install adb · Fedora y Arch: paquete android-tools)."
         )
     raise GoGoCamError(
         "No encontré adb. Instala Android Platform Tools o define la variable GOGOCAM_ADB "
@@ -156,7 +164,7 @@ def adb(adb_exe: str, *args: str, serial: Optional[str] = None, timeout: float =
 
 def elegir_telefono(salida_devices: str) -> str:
     """Elige el teléfono de la salida de `adb devices`; prefiere USB sobre Wi-Fi."""
-    listos, sin_permiso, offline = [], [], []
+    listos, sin_permiso, sin_permiso_usb, offline = [], [], [], []
     for linea in salida_devices.splitlines()[1:]:
         partes = linea.split()
         if len(partes) < 2:
@@ -166,6 +174,8 @@ def elegir_telefono(salida_devices: str) -> str:
             listos.append(serial)
         elif estado == "unauthorized":
             sin_permiso.append(serial)
+        elif estado == "no":  # Linux: «no permissions (missing udev rules?…)»
+            sin_permiso_usb.append(serial)
         elif estado == "offline":
             offline.append(serial)
     if listos:
@@ -175,6 +185,12 @@ def elegir_telefono(salida_devices: str) -> str:
         raise GoGoCamError(
             "El teléfono está conectado pero falta el permiso: desbloquéalo y acepta "
             "«Permitir depuración USB»."
+        )
+    if sin_permiso_usb:
+        raise GoGoCamError(
+            "Linux no te deja usar el teléfono por USB (faltan las reglas de udev). Instálalas "
+            "(Ubuntu, Mint o Debian: sudo apt install android-sdk-platform-tools-common · "
+            "Arch: sudo pacman -S android-udev), desenchufa el cable y vuelve a enchufarlo."
         )
     if offline:
         raise GoGoCamError("El teléfono aparece desconectado (offline). Desenchufa y vuelve a enchufar el cable.")
@@ -283,8 +299,10 @@ def sin_modo_eficiencia() -> bool:
 
     Windows 11 aplica "modo eficiencia" (EcoQoS) a los procesos en segundo plano:
     baja la velocidad del CPU para ellos y eso trabaría el video que recibe la reunión.
-    Devuelve True si Windows aceptó.
+    Devuelve True si Windows aceptó. En Linux no hace nada (y `ctypes.wintypes` ni carga).
     """
+    if not ES_WINDOWS:
+        return False
     try:
         import ctypes
         from ctypes import wintypes
@@ -315,22 +333,53 @@ def puerto_libre() -> int:
         return s.getsockname()[1]
 
 
+# Cámara virtual: en Windows la de OBS Studio; en Linux un dispositivo v4l2loopback que
+# instalar.sh crea como /dev/video10 con el nombre «GoGoCam».
+BACKEND_CAMARA = "obs" if ES_WINDOWS else "v4l2loopback"
+NOMBRE_CAMARA_VIRTUAL = "OBS Virtual Camera" if ES_WINDOWS else "GoGoCam"
 FALTA_OBS = ("Falta OBS Studio en este PC. Instálalo gratis desde obsproject.com (una sola vez; "
              "no hace falta abrirlo) y vuelve a presionar Iniciar.")
+FALTA_V4L2 = ("Falta la cámara virtual de Linux (v4l2loopback). Vuelve a correr instalar.sh; si ya lo "
+              "corriste, reinicia el PC (con Secure Boot, al arrancar elige «Enroll MOK» y escribe la "
+              "clave que creaste al instalar).")
+SIN_PERMISO_V4L2 = ("Tu usuario no tiene permiso para usar la cámara virtual. En una terminal: "
+                    "sudo usermod -aG video $USER, y después cierra sesión y vuelve a entrar.")
+FALTA_CAMARA_VIRTUAL = FALTA_OBS if ES_WINDOWS else FALTA_V4L2
 
 
-def mensaje_camara_virtual(detalle: str) -> str:
-    """Traduce el error de pyvirtualcam a algo que se entienda sin saber qué es un backend."""
-    if "not found" in detalle or "install" in detalle.lower():  # «device not found! Did you install OBS?»
-        return FALTA_OBS
-    return ("No pude abrir «OBS Virtual Camera». Si OBS tiene su cámara virtual encendida, "
-            f"apágala o cierra OBS y vuelve a intentar. (Detalle: {detalle})")
+def mensaje_camara_virtual(detalle: str, windows: bool = ES_WINDOWS) -> str:
+    """Traduce el error de pyvirtualcam a algo que se entienda sin saber qué es un backend.
+    Los textos en inglés son los del módulo nativo de pyvirtualcam 0.15 de cada sistema."""
+    if windows:
+        if "not found" in detalle or "install" in detalle.lower():  # «device not found! Did you install OBS?»
+            return FALTA_OBS
+        return ("No pude abrir «OBS Virtual Camera». Si OBS tiene su cámara virtual encendida, "
+                f"apágala o cierra OBS y vuelve a intentar. (Detalle: {detalle})")
+    if "No v4l2 loopback device" in detalle or "modprobe" in detalle:
+        return FALTA_V4L2
+    if "permission" in detalle:  # «…due to missing permissions. Did you add your user to the 'video' group?»
+        return SIN_PERMISO_V4L2
+    return ("No pude abrir la cámara virtual. Si OBS u otro GoGoCam la está usando, ciérralo y "
+            f"vuelve a intentar. (Detalle: {detalle})")
+
+
+def nombre_visible(dispositivo: str, windows: bool = ES_WINDOWS,
+                   carpeta_sys: Path = Path("/sys/class/video4linux")) -> str:
+    """Cómo aparece la cámara virtual en Meet o Zoom. En Linux pyvirtualcam entrega la ruta
+    (/dev/video10) y el nombre visible es el card_label de v4l2loopback, que está en /sys."""
+    if windows or not dispositivo.startswith("/dev/"):
+        return dispositivo
+    try:
+        nombre = (carpeta_sys / Path(dispositivo).name / "name").read_text(encoding="utf-8").strip()
+    except OSError:
+        return dispositivo
+    return f"{nombre} ({dispositivo})" if nombre else dispositivo
 
 
 def abrir_camara_virtual(ancho: int, alto: int, fps: int) -> pyvirtualcam.Camera:
     try:
         return pyvirtualcam.Camera(
-            width=ancho, height=alto, fps=fps, fmt=pyvirtualcam.PixelFormat.I420, backend="obs"
+            width=ancho, height=alto, fps=fps, fmt=pyvirtualcam.PixelFormat.I420, backend=BACKEND_CAMARA
         )
     except RuntimeError as e:
         raise GoGoCamError(mensaje_camara_virtual(str(e))) from e
@@ -353,6 +402,7 @@ class Transmision:
         self.cuadros = 0
         self.fps = 0.0
         self.tamano_salida = (0, 0)
+        self.dispositivo = ""  # nombre de la cámara virtual tal como la ven Meet o Zoom
         self.error: Optional[str] = None
         self._parar = threading.Event()
         self._hilo: Optional[threading.Thread] = None
@@ -553,7 +603,8 @@ class Transmision:
                         camara = abrir_camara_virtual(ancho, alto, self.ajustes.fps)
                         dims_camara = (ancho, alto)
                         self.tamano_salida = dims_camara
-                        self._avisar("ok", f"Transmitiendo {ancho}x{alto} a «{camara.device}».")
+                        self.dispositivo = nombre_visible(camara.device)
+                        self._avisar("ok", f"Transmitiendo {ancho}x{alto} a «{self.dispositivo}».")
                     camara.send(datos)
                     # Con cuadros llegando la cámara del teléfono ya está lista: antes de eso
                     # descarta los mensajes de control sin avisar.

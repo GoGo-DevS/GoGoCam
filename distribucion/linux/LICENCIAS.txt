@@ -1,0 +1,18 @@
+GoGoCam para Linux - componentes y licencias
+
+GoGoCam (c) GoGoDevS. Esta carpeta ES el código fuente completo de GoGoCam.
+
+Viene dentro:
+
+- Servidor de scrcpy 5.0.1 (Genymobile), sin modificar - Apache License 2.0.
+  https://github.com/Genymobile/scrcpy - texto: vendor/LICENSE-scrcpy.txt
+
+instalar.sh descarga e instala en tu PC (no vienen en esta carpeta):
+
+- pyvirtualcam (Maik Riechert) - GNU GPL v2. https://github.com/letmaik/pyvirtualcam
+- PyAV - BSD 3-Clause, con bibliotecas de FFmpeg (LGPL 2.1 o posterior).
+  https://github.com/PyAV-Org/PyAV
+- NumPy - BSD 3-Clause. https://numpy.org
+
+Y desde los paquetes de tu distribución: adb (Android SDK Platform-Tools, Apache 2.0),
+Python con Tk y v4l2loopback (GPL-2.0).

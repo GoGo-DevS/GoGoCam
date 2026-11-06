@@ -23,7 +23,7 @@ class CarpetaPrograma(unittest.TestCase):
 class BuscarAdb(unittest.TestCase):
     def test_prefiere_el_adb_que_viene_en_el_paquete(self):
         with tempfile.TemporaryDirectory() as carpeta:
-            propio = Path(carpeta) / "vendor" / "adb.exe"
+            propio = Path(carpeta) / "vendor" / ("adb.exe" if core.ES_WINDOWS else "adb")
             propio.parent.mkdir()
             propio.write_bytes(b"")
             with mock.patch.object(core, "RAIZ", Path(carpeta)), mock.patch.dict(os.environ):
@@ -41,6 +41,7 @@ class BuscarAdb(unittest.TestCase):
                 self.assertEqual(core.buscar_adb(), str(elegido))
 
 
+    @unittest.skipUnless(sys.platform == "win32", "el .exe es solo para Windows")
     def test_empaquetada_sin_adb_pide_descomprimir_de_nuevo(self):
         with tempfile.TemporaryDirectory() as carpeta, \
                 mock.patch.object(core, "RAIZ", Path(carpeta)), \
@@ -55,16 +56,17 @@ class BuscarAdb(unittest.TestCase):
 class MensajeCamaraVirtual(unittest.TestCase):
     def test_sin_obs_instalado_dice_que_lo_instale(self):
         detalle = "'obs' backend: OBS Virtual Camera device not found! Did you install OBS?"
-        self.assertEqual(core.mensaje_camara_virtual(detalle), core.FALTA_OBS)
+        self.assertEqual(core.mensaje_camara_virtual(detalle, windows=True), core.FALTA_OBS)
         self.assertIn("obsproject.com", core.FALTA_OBS)
 
     def test_ocupada_dice_que_la_apague(self):
-        mensaje = core.mensaje_camara_virtual("'obs' backend: virtual camera output could not be started")
+        mensaje = core.mensaje_camara_virtual("'obs' backend: virtual camera output could not be started", windows=True)
         self.assertNotEqual(mensaje, core.FALTA_OBS)
         self.assertIn("apágala", mensaje)
 
 
 class ComandoGoGoCam(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "win32", "rutas de Windows")
     def test_empaquetada_apunta_al_exe_sin_menos_m(self):
         exe = r"C:\Apps\GoGoCam\GoGoCam.exe"
         with mock.patch.object(sys, "frozen", True, create=True), mock.patch.object(sys, "executable", exe):
@@ -90,15 +92,18 @@ class Diagnostico(unittest.TestCase):
     def test_el_servidor_de_scrcpy_del_repo_esta_integro(self):
         self.assertIn("íntegro", _servidor())
 
+    @unittest.skipUnless(sys.platform == "win32", "OBS es la cámara virtual de Windows")
     def test_obs_instalado_se_reconoce_sin_abrir_la_camara(self):
         with mock.patch.object(diagnostico, "camaras_de_windows", return_value=["DroidCam Source 2", "OBS Virtual Camera"]):
             self.assertEqual(diagnostico._camara_virtual(), "instalada")
 
+    @unittest.skipUnless(sys.platform == "win32", "OBS es la cámara virtual de Windows")
     def test_sin_obs_el_diagnostico_dice_que_lo_instale(self):
         with mock.patch.object(diagnostico, "camaras_de_windows", return_value=["DroidCam Source 2"]):
             resultado = revisar([("OBS Virtual Camera", diagnostico._camara_virtual)])
         self.assertEqual(resultado, [("OBS Virtual Camera", False, core.FALTA_OBS)])
 
+    @unittest.skipUnless(sys.platform == "win32", "registro de Windows")
     def test_lee_las_camaras_de_este_windows(self):
         self.assertIsInstance(diagnostico.camaras_de_windows(), list)
 

@@ -5,6 +5,7 @@
     python  -m gogocam --diagnostico    revisa que no falte nada, sin tocar el teléfono
 
 En el .exe empaquetado son los mismos argumentos: GoGoCam.exe --diagnostico.
+En Linux, instalar.sh deja el comando `gogocam` (gogocam --diagnostico).
 """
 from __future__ import annotations
 
@@ -16,7 +17,10 @@ import sys
 import time
 from pathlib import Path
 
-CARPETA_DATOS = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "GoGoCam"
+if sys.platform == "win32":
+    CARPETA_DATOS = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "GoGoCam"
+else:  # Linux: donde instalar.sh deja la app (estándar XDG)
+    CARPETA_DATOS = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "gogocam"
 
 
 def configurar_registro() -> Path:

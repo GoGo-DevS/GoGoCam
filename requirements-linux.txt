@@ -1,0 +1,8 @@
+# Linux: instalar.sh instala esto en un entorno propio (~/.local/share/gogocam/venv).
+# Rangos amplios a propósito: pip elige la versión con paquete listo para el Python de
+# cada distribución. Verificado el 06-11-2026 que hay paquetes manylinux x86_64:
+#   Python 3.10 -> av 17.1.0, numpy 2.2.6, pyvirtualcam 0.15.0
+#   Python 3.12 y 3.13 -> av 19.0.2, numpy 2.5.4, pyvirtualcam 0.15.0
+av>=14
+numpy>=1.24
+pyvirtualcam>=0.12

@@ -125,6 +125,33 @@ sus archivos en `_internal` (`sys._MEIPASS`). Subir la versión en
 código fuente (`licencias/codigo-fuente-gogocam.zip`, lo arma el script). Para
 venderlo cerrado habría que reemplazar pyvirtualcam.
 
+## Linux
+
+```powershell
+.\.venv\Scripts\python.exe herramientas\empaquetar_linux.py     # se arma desde Windows
+```
+
+Deja `dist\GoGoCam-<versión>-linux.tar.gz` (~0,7 MB): el código fuente con
+`instalar.sh`, `desinstalar.sh` y su `LEEME.txt` (fuentes en `distribucion/linux/`).
+El empaquetador fuerza saltos de línea LF y permiso 755 en los `.sh` (con CRLF
+fallan con «bad interpreter»; `.gitattributes` también los fija).
+
+`instalar.sh` (apt, dnf, pacman o zypper) instala adb, Python con Tk y
+**v4l2loopback**, que es la cámara virtual de Linux: `/dev/video10` con el nombre
+«GoGoCam» y `exclusive_caps=1` (sin eso Chrome y Meet no la ven; con eso aparece
+recién cuando GoGoCam transmite). Copia la app a `~/.local/share/gogocam/app`, arma
+un venv con `requirements-linux.txt` (solo paquetes listos), y crea el comando
+`gogocam` y el acceso del menú. Si v4l2loopback ya estaba cargado (OBS lo usa), no lo
+toca.
+
+En el código, `core.ES_WINDOWS` separa lo propio de cada sistema: backend
+`v4l2loopback` en vez de `obs`, adb del sistema o de `~/Android/Sdk`, datos en
+`~/.local/share/gogocam`, arranque con un `.desktop` en `~/.config/autostart`, y en
+el diagnóstico la cámara se busca en `/sys/devices/virtual/video4linux`. Las pruebas
+de `tests/test_linux.py` simulan esa parte (corren en Windows). **No está probado en
+un Linux real**: la simulación del instalador (`sudo`, `apt-get` y `python3` falsos)
+recorre el flujo completo, pero no carga el módulo ni transmite.
+
 **Actualizar scrcpy:** el servidor y el cliente tienen que ser exactamente de la
 misma versión. Baja `scrcpy-server-vX.Y.Z` de la release oficial, verifica su
 SHA-256 con `SHA256SUMS.txt`, déjalo en `vendor/`, cambia `VERSION_SERVIDOR` en

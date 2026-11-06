@@ -1,0 +1,74 @@
+GoGoCam 1.0 para Linux - la cámara de tu teléfono como cámara web del PC
+Hecha por GoGoDevS. Gratis, sin publicidad y sin funciones bloqueadas.
+Funciona por cable USB y no hay que instalar nada en el teléfono.
+
+
+LO QUE NECESITAS
+- Un PC con Linux (x86_64): Ubuntu, Linux Mint, Pop!_OS, Debian, Fedora, Arch, Manjaro
+  u openSUSE. Con Python 3.10 o más nuevo (Ubuntu 22.04 en adelante ya lo trae).
+- Un teléfono Android 12 o más nuevo (con iPhone no funciona).
+- Un cable USB que transmita datos (hay cables que solo cargan).
+- Internet la primera vez: el instalador descarga unos 100 MB.
+
+
+EN EL TELÉFONO (solo la primera vez)
+1. Activa las opciones de desarrollador: en Ajustes > Acerca del teléfono, toca 7 veces
+   «Número de compilación». En Xiaomi es «Versión de MIUI» o «Versión del SO»; en Samsung
+   está dentro de «Información de software».
+2. Entra a «Opciones de desarrollador» y activa «Depuración USB».
+   En Xiaomi está en Ajustes > Ajustes adicionales; en Samsung, al final de Ajustes;
+   en Motorola y Pixel, en Ajustes > Sistema.
+3. Conecta el teléfono al PC con el cable. En el teléfono aparece «¿Permitir depuración USB?»:
+   marca «Permitir siempre desde este equipo» y acepta.
+
+
+INSTALAR (una sola vez)
+1. Descomprime el archivo: clic derecho > «Extraer aquí».
+2. Abre una terminal dentro de la carpeta que salió (clic derecho > «Abrir en una terminal»)
+   y escribe:
+
+       ./instalar.sh
+
+   Te va a pedir tu clave: es para instalar adb, Tk y la cámara virtual (v4l2loopback).
+3. Si tu PC tiene Secure Boot, durante la instalación puede aparecer un aviso para crear
+   una clave. Créala y reinicia: al arrancar sale una pantalla azul, elige «Enroll MOK»
+   y escribe esa misma clave. Después corre ./instalar.sh otra vez.
+
+Al final el instalador revisa que esté todo y te dice si falta algo.
+
+
+USAR
+1. Abre GoGoCam desde el menú de aplicaciones (o escribe gogocam en una terminal).
+2. Presiona Iniciar.
+3. En Meet, Zoom, Discord u OBS elige la cámara «GoGoCam».
+   Ojo: en Chrome y en Meet la cámara aparece recién cuando GoGoCam ya está
+   transmitiendo. Si no la ves, presiona Iniciar y recarga la página.
+
+
+TIPS
+- Puedes minimizarla: sigue transmitiendo igual.
+- Con poca luz, en la pestaña Calidad elige 20 fps: la imagen sale bastante más clara.
+- La cámara trasera se ve mejor que la de selfie. Se cambia en la pestaña Calidad.
+- Si el teléfono está vertical, gira la imagen en la pestaña Imagen > Rotación.
+- En la pestaña Imagen tienes brillo, contraste, zoom y linterna, y todo cambia en vivo.
+
+
+SI ALGO FALLA
+- Escribe en una terminal:  gogocam --diagnostico
+  Te dice qué falta, sin tocar el teléfono.
+- «No veo ningún teléfono»: prueba con otro cable y revisa que la depuración USB esté activa.
+- «Linux no te deja usar el teléfono por USB»: sigue lo que dice el mensaje (reglas de udev).
+- «Falta la cámara virtual»: corre ./instalar.sh otra vez; si sigue, reinicia el PC.
+- «Tu usuario no tiene permiso para usar la cámara virtual»: cierra sesión y vuelve a entrar.
+- La imagen se corta después de unos minutos: en Opciones de desarrollador del teléfono
+  activa la opción que deja la pantalla encendida mientras carga (se llama «Pantalla activa»
+  o parecido) y presiona Iniciar de nuevo.
+- Si no se arregla, mándale a Diego el archivo ~/.local/share/gogocam/gogocam.log
+
+
+ACTUALIZAR O DESINSTALAR
+- Para actualizar: descomprime la versión nueva y corre su ./instalar.sh.
+- Para desinstalar: ./desinstalar.sh (no quita adb, Python ni v4l2loopback).
+
+
+Licencias: LICENCIAS.txt

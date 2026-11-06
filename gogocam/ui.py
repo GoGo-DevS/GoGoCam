@@ -9,7 +9,9 @@ from tkinter import ttk
 from typing import Callable, Optional
 
 from . import sistema
-from .core import ZOOM_PASO_MAX, Ajustes, Transmision, sin_modo_eficiencia, zoom_de_paso
+from .core import (
+    ES_WINDOWS, NOMBRE_CAMARA_VIRTUAL, ZOOM_PASO_MAX, Ajustes, Transmision, sin_modo_eficiencia, zoom_de_paso,
+)
 
 log = logging.getLogger("gogocam")
 
@@ -29,8 +31,10 @@ CONTRASTE = (50, 150)
 TICK_MS = 30  # la vista previa llega a ~10 fps; revisar cada 30 ms la muestra pareja
 TICK_MINIMIZADA_MS = 250  # minimizada solo se atienden avisos (errores, fin)
 GUARDAR_TRAS_MS = 400  # los deslizadores guardan al soltarlos, no en cada movimiento
-FUENTE = ("Segoe UI", 10)
-FUENTE_NEGRITA = ("Segoe UI Semibold", 10)
+# DejaVu Sans viene en casi todas las distribuciones; si falta, Tk elige la más parecida.
+FAMILIA = "Segoe UI" if ES_WINDOWS else "DejaVu Sans"
+FUENTE = (FAMILIA, 10)
+FUENTE_NEGRITA = ("Segoe UI Semibold", 10) if ES_WINDOWS else (FAMILIA, 10, "bold")
 
 # Colores de GoGoDevS: navy #0A1428, ámbar #FFB627, azul #2563EB, gris #A8B3CF
 PALETAS = {
@@ -187,7 +191,7 @@ class App:
         self.caja.columnconfigure(0, weight=1)
         self.caja.rowconfigure(0, weight=1)
         self.vista = tk.Label(self.caja, bg=self.paleta["vista"], fg=self.paleta["vista_texto"],
-                              text="Sin imagen", font=("Segoe UI", 11))
+                              text="Sin imagen", font=(FAMILIA, 11))
         self.vista.grid(row=0, column=0)
 
         self.cuaderno = ttk.Notebook(marco)
@@ -274,12 +278,12 @@ class App:
         cuaderno.add(p, text="Opciones")
         self.var_vista = tk.BooleanVar(value=self.ajustes.vista_previa)
         self.var_autoiniciar = tk.BooleanVar(value=self.ajustes.autoiniciar)
-        self.var_con_windows = tk.BooleanVar(value=sistema.abre_con_windows())
+        self.var_al_encender = tk.BooleanVar(value=sistema.abre_al_encender())
         self.var_tema = tk.BooleanVar(value=self.ajustes.tema_oscuro)
         for i, (texto, var, accion) in enumerate((
             ("Vista previa en la ventana", self.var_vista, self._cambio_vista),
             ("Empezar a transmitir al abrir GoGoCam", self.var_autoiniciar, self._cambio_autoiniciar),
-            ("Abrir GoGoCam al encender el PC (minimizada)", self.var_con_windows, self._cambio_con_windows),
+            ("Abrir GoGoCam al encender el PC (minimizada)", self.var_al_encender, self._cambio_al_encender),
             ("Tema oscuro", self.var_tema, self._cambio_tema),
         )):
             ttk.Checkbutton(p, text=texto, variable=var, command=accion).grid(row=i, column=0, sticky="w")
@@ -387,14 +391,14 @@ class App:
         self.ajustes.autoiniciar = self.var_autoiniciar.get()
         self._guardar()
 
-    def _cambio_con_windows(self) -> None:
-        pedido = self.var_con_windows.get()
+    def _cambio_al_encender(self) -> None:
+        pedido = self.var_al_encender.get()
         try:
-            sistema.abrir_con_windows(pedido)
+            sistema.abrir_al_encender(pedido)
         except OSError as e:
-            log.exception("no pude cambiar el inicio con Windows")
-            self.var_con_windows.set(sistema.abre_con_windows())
-            self._poner_estado("error", f"No pude cambiar el inicio con Windows: {e}")
+            log.exception("no pude cambiar el arranque al encender")
+            self.var_al_encender.set(sistema.abre_al_encender())
+            self._poner_estado("error", f"No pude cambiar el arranque al encender: {e}")
             return
         self._poner_estado("info", "GoGoCam se abrirá minimizada al encender el PC." if pedido
                            else "GoGoCam ya no se abre al encender el PC.")
@@ -515,7 +519,7 @@ class App:
                     self._pintar(muestra)
                 if t.cuadros:
                     ancho, alto = t.tamano_salida
-                    texto = f"{ancho}x{alto} · {t.fps:.0f} fps · «OBS Virtual Camera»"
+                    texto = f"{ancho}x{alto} · {t.fps:.0f} fps · «{t.dispositivo or NOMBRE_CAMARA_VIRTUAL}»"
                     if self.datos.cget("text") != texto:
                         self.datos.configure(text=texto)
         self.raiz.after(TICK_MINIMIZADA_MS if minimizada else TICK_MS, self._tick)
@@ -530,7 +534,7 @@ def ejecutar(carpeta_datos: Path, minimizada: bool = False) -> None:
         pass
     sin_modo_eficiencia()  # minimizada tiene que seguir a toda velocidad
     sistema.identificar_aplicacion()  # ícono propio en la barra de tareas
-    raiz = tk.Tk()
+    raiz = tk.Tk(className=sistema.CLASE_VENTANA)  # Linux: el ícono del menú, no el de Python
     App(raiz, carpeta_datos)
     if minimizada:
         raiz.iconify()

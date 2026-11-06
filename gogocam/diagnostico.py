@@ -1,28 +1,38 @@
 """Revisa que GoGoCam tenga todo lo que necesita, SIN tocar el teléfono.
 
-    GoGoCam.exe --diagnostico            (o: python -m gogocam --diagnostico)
+    GoGoCam.exe --diagnostico            Windows, versión empaquetada
+    gogocam --diagnostico                Linux, después de instalar.sh
+    python -m gogocam --diagnostico      desde el código fuente
 
-El resultado queda en gogocam.log (carpeta %LOCALAPPDATA%\\GoGoCam) y el programa
-sale con código 0 si todo está bien. Sirve para revisar un .exe recién armado y
-para que un amigo mande su registro cuando algo no le funciona.
+El resultado queda en gogocam.log (Windows: %LOCALAPPDATA%\\GoGoCam; Linux:
+~/.local/share/gogocam) y el programa sale con código 0 si todo está bien. Sirve
+para revisar un paquete recién armado y para que un amigo mande su registro
+cuando algo no le funciona.
 """
 from __future__ import annotations
 
 import hashlib
 import logging
+import os
+import platform
 import subprocess
 import sys
+from pathlib import Path
 from typing import Callable
 
 from . import __version__
-from .core import FALTA_OBS, RAIZ, SERVIDOR_LOCAL, SIN_VENTANA, GoGoCamError, buscar_adb
+from .core import (
+    ES_WINDOWS, FALTA_OBS, FALTA_V4L2, NOMBRE_CAMARA_VIRTUAL, RAIZ, SERVIDOR_LOCAL, SIN_PERMISO_V4L2,
+    SIN_VENTANA, GoGoCamError, buscar_adb,
+)
 
 log = logging.getLogger("gogocam")
 
 
 def _version() -> str:
     modo = "empaquetada" if getattr(sys, "frozen", False) else "código fuente"
-    return f"GoGoCam {__version__} ({modo}) en {RAIZ}"
+    return (f"GoGoCam {__version__} ({modo}) · {platform.system()} {platform.release()} · "
+            f"Python {platform.python_version()} · en {RAIZ}")
 
 
 def _servidor() -> str:
@@ -54,6 +64,16 @@ def _decodificador() -> str:
     return f"PyAV {av.__version__}"
 
 
+def _ventana() -> str:
+    """Tk viene con Python en Windows; en Linux es un paquete aparte (python3-tk)."""
+    try:
+        import tkinter
+    except ImportError as e:
+        raise GoGoCamError("Falta Tk para Python: la ventana no puede abrir "
+                           "(Ubuntu, Mint o Debian: sudo apt install python3-tk).") from e
+    return f"Tk {tkinter.TkVersion}"
+
+
 CATEGORIA_CAMARAS = r"CLSID\{860BB310-5D01-11D0-BD3B-00A0C911CE86}\Instance"  # cámaras DirectShow
 
 
@@ -72,12 +92,36 @@ def camaras_de_windows() -> list[str]:
     return nombres
 
 
+def camaras_v4l2loopback(carpeta: Path = Path("/sys/devices/virtual/video4linux"),
+                         dev: Path = Path("/dev")) -> list[tuple[str, Path]]:
+    """(nombre, /dev/videoN) de las cámaras virtuales de Linux. Las de v4l2loopback cuelgan de
+    /sys/devices/virtual; las webcams reales, de su bus (USB, PCI)."""
+    if not carpeta.is_dir():
+        return []
+    camaras = []
+    for dispositivo in sorted(carpeta.glob("video*")):
+        try:
+            nombre = (dispositivo / "name").read_text(encoding="utf-8").strip()
+        except OSError:
+            nombre = ""
+        camaras.append((nombre or dispositivo.name, dev / dispositivo.name))
+    return camaras
+
+
 def _camara_virtual() -> str:
     """La busca SIN abrirla: abrirla chocaría con una transmisión en curso, y el diagnóstico
     se tiene que poder correr en plena llamada."""
-    if "OBS Virtual Camera" in camaras_de_windows():
-        return "instalada"
-    raise GoGoCamError(FALTA_OBS)
+    if ES_WINDOWS:
+        if "OBS Virtual Camera" in camaras_de_windows():
+            return "instalada"
+        raise GoGoCamError(FALTA_OBS)
+    camaras = camaras_v4l2loopback()
+    if not camaras:
+        raise GoGoCamError(FALTA_V4L2)
+    usables = [f"«{nombre}» ({ruta})" for nombre, ruta in camaras if os.access(ruta, os.W_OK)]
+    if not usables:
+        raise GoGoCamError(SIN_PERMISO_V4L2)
+    return "lista: " + ", ".join(usables)
 
 
 REVISIONES: list[tuple[str, Callable[[], str]]] = [
@@ -85,7 +129,8 @@ REVISIONES: list[tuple[str, Callable[[], str]]] = [
     ("servidor de scrcpy", _servidor),
     ("adb", _adb),
     ("decodificador H.264", _decodificador),
-    ("OBS Virtual Camera", _camara_virtual),
+    ("ventana (Tk)", _ventana),
+    (f"cámara virtual ({NOMBRE_CAMARA_VIRTUAL})", _camara_virtual),
 ]
 
 

@@ -1,0 +1,2 @@
+# Los scripts de Linux no corren con saltos de línea de Windows ("bad interpreter: ^M").
+*.sh text eol=lf

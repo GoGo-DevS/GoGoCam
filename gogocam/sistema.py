@@ -1,4 +1,9 @@
-"""Integración con Windows: ícono, barra de título oscura, accesos directos y arranque."""
+"""Integración con el sistema: ícono, barra de título oscura, accesos directos y arranque.
+
+En Windows el arranque es un acceso directo (.lnk) en la carpeta Inicio; en Linux, un
+archivo .desktop en ~/.config/autostart (el estándar de freedesktop que siguen GNOME,
+KDE, Cinnamon, XFCE y compañía).
+"""
 from __future__ import annotations
 
 import logging
@@ -7,15 +12,23 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .core import RAIZ, SIN_VENTANA
+from .core import ES_WINDOWS, RAIZ, SIN_VENTANA
 
 log = logging.getLogger("gogocam")
 
 ICONO = RAIZ / "recursos" / "gogocam.ico"
+ICONO_PNG = RAIZ / "recursos" / "gogocam.png"
 ID_APLICACION = "GoGoDevS.GoGoCam"
-CARPETA_INICIO = (Path(os.environ.get("APPDATA", Path.home())) / "Microsoft" / "Windows"
-                  / "Start Menu" / "Programs" / "Startup")
-ACCESO_INICIO = CARPETA_INICIO / "GoGoCam.lnk"
+# Linux: la clase de la ventana (WM_CLASS) une la ventana con su ícono del menú. Tk la deja
+# con mayúscula inicial y el resto en minúsculas: "gogocam" queda "Gogocam".
+CLASE_VENTANA = "gogocam"
+CLASE_VENTANA_X11 = "Gogocam"
+if ES_WINDOWS:
+    ACCESO_INICIO = (Path(os.environ.get("APPDATA", Path.home())) / "Microsoft" / "Windows"
+                     / "Start Menu" / "Programs" / "Startup" / "GoGoCam.lnk")
+else:
+    ACCESO_INICIO = (Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+                     / "autostart" / "gogocam.desktop")
 
 
 def iconos_png() -> list[Path]:
@@ -49,7 +62,7 @@ def barra_titulo_oscura(ventana, oscura: bool) -> None:
 
 
 def pythonw() -> str:
-    """El intérprete sin consola que corre a GoGoCam."""
+    """El intérprete que corre a GoGoCam (en Windows, el que no abre consola)."""
     exe = Path(sys.executable)
     sin_consola = exe.with_name("pythonw.exe")
     return str(sin_consola if sin_consola.is_file() else exe)
@@ -66,8 +79,8 @@ def comando_gogocam(minimizada: bool = False) -> tuple[str, str, str]:
 
 
 def crear_acceso(destino: Path, minimizada: bool = False) -> None:
-    """Crea un acceso directo (.lnk) a GoGoCam con su ícono. Los valores van por variables
-    de entorno para no pelear con comillas y espacios en las rutas."""
+    """Windows: crea un acceso directo (.lnk) a GoGoCam con su ícono. Los valores van por
+    variables de entorno para no pelear con comillas y espacios en las rutas."""
     script = (
         "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:GOGO_LNK);"
         "$s.TargetPath=$env:GOGO_EXE;$s.Arguments=$env:GOGO_ARGS;"
@@ -85,16 +98,51 @@ def crear_acceso(destino: Path, minimizada: bool = False) -> None:
         raise OSError(f"no pude crear el acceso directo {destino}: {resultado.stderr.strip()}")
 
 
-def abre_con_windows() -> bool:
+def argumento_desktop(texto: str) -> str:
+    """Un argumento para la línea Exec= de un .desktop: entre comillas si lleva espacios
+    u otros caracteres reservados, escapando ", `, $ y \\ (especificación freedesktop)."""
+    if texto and not any(c in texto for c in " \t\n\"'\\><~|&;$*?#()`"):
+        return texto
+    for especial in ("\\", '"', "`", "$"):
+        texto = texto.replace(especial, "\\" + especial)
+    return f'"{texto}"'
+
+
+def escribir_desktop(destino: Path, minimizada: bool = False) -> None:
+    """Linux: crea el .desktop que abre GoGoCam."""
+    exe, argumentos, carpeta = comando_gogocam(minimizada)
+    linea = " ".join([argumento_desktop(exe), *argumentos.split()])
+    contenido = "\n".join([
+        "[Desktop Entry]",
+        "Type=Application",
+        "Name=GoGoCam",
+        "Comment=La cámara del teléfono como cámara web",
+        f"Exec={linea}",
+        f"Path={carpeta}",
+        f"Icon={ICONO_PNG}",
+        "Terminal=false",
+        "Categories=AudioVideo;Video;",
+        f"StartupWMClass={CLASE_VENTANA_X11}",
+        "X-GNOME-Autostart-enabled=true",
+        "",
+    ])
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_text(contenido, encoding="utf-8")
+
+
+def abre_al_encender() -> bool:
     return ACCESO_INICIO.is_file()
 
 
-def abrir_con_windows(activar: bool) -> None:
-    """Pone o quita GoGoCam del inicio de Windows (se abre minimizada)."""
+def abrir_al_encender(activar: bool) -> None:
+    """Pone o quita GoGoCam del arranque de la sesión (se abre minimizada)."""
     if activar:
-        CARPETA_INICIO.mkdir(parents=True, exist_ok=True)
-        crear_acceso(ACCESO_INICIO, minimizada=True)
-        log.info("GoGoCam se abrirá con Windows: %s", ACCESO_INICIO)
+        ACCESO_INICIO.parent.mkdir(parents=True, exist_ok=True)
+        if ES_WINDOWS:
+            crear_acceso(ACCESO_INICIO, minimizada=True)
+        else:
+            escribir_desktop(ACCESO_INICIO, minimizada=True)
+        log.info("GoGoCam se abrirá al encender: %s", ACCESO_INICIO)
     elif ACCESO_INICIO.exists():
         ACCESO_INICIO.unlink()
-        log.info("GoGoCam ya no se abre con Windows")
+        log.info("GoGoCam ya no se abre al encender")
